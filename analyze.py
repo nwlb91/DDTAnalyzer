@@ -93,6 +93,17 @@ def load_data():
         .mean()
     )
 
+    # Compute how many days each DDT was active (gap to next DDT).
+    # A DDT left up for multiple days accumulates extra comments, which
+    # would otherwise be mistaken for user-driven engagement.
+    dates = pd.to_datetime(df["date"])
+    gaps = dates.diff(periods=-1).abs().dt.days
+    df["days_active"] = gaps.fillna(1).astype(int).clip(lower=1)
+
+    n_multiday = (df["days_active"] > 1).sum()
+    if n_multiday > 0:
+        print(f"  Note: {n_multiday} DDTs were left up for multiple days (controlled for in model)")
+
     print(f"Loaded {len(df)} DDTs spanning {df['date'].min()} to {df['date'].max()}")
     print(f"  Total comments: {df['total_comments'].sum():,}")
     print(f"  Mean comments/DDT: {df['total_comments'].mean():.1f}")
@@ -128,6 +139,10 @@ def build_confound_features(df):
     rolling_lag = df["total_comments"].rolling(window=7, min_periods=1).mean().shift(1)
     rolling_lag = rolling_lag.fillna(df["total_comments"].mean())
     features["rolling_activity_7d"] = rolling_lag.values
+
+    # Days active: how many days a DDT was pinned/left up.
+    # A DDT stuck up for 2-3 days naturally accumulates more comments.
+    features["days_active"] = df["days_active"].values.astype(float)
 
     X = pd.DataFrame(features, index=df.index)
     return X
@@ -523,6 +538,15 @@ def print_summary_stats(df):
         if day in dow_stats.index:
             row = dow_stats.loc[day]
             print(f"    {day:>12s}: mean={row['mean']:.1f}  median={row['median']:.1f}  (n={row['count']:.0f})")
+
+    # Multi-day DDTs
+    multiday = df[df["days_active"] > 1]
+    if not multiday.empty:
+        print(f"\n  Multi-day DDTs: {len(multiday)}")
+        for _, row in multiday.iterrows():
+            print(f"    {row['date']} ({row['days_active']} days up, {row['total_comments']} comments)")
+    else:
+        print(f"\n  Multi-day DDTs: 0")
 
     # Unique users
     all_users = set()

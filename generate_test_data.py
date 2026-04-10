@@ -103,8 +103,27 @@ def generate():
         dow = dt.weekday()
         month = dt.month
 
-        # Skip ~5% of days randomly (DDT not posted or holiday)
+        # Skip ~5% of days randomly (DDT not posted or holiday).
+        # This also simulates multi-day DDTs: when a day is skipped,
+        # the previous DDT stays up longer and accumulates extra comments.
         if rng.random() < 0.05:
+            # Add extra comments to the previous DDT (it's still pinned)
+            if posts:
+                prev_id = posts[-1]["id"]
+                extra = int(rng.integers(15, 50))
+                for j in range(extra):
+                    all_comments[prev_id].append({
+                        "author": f"lurker_{rng.integers(0, 500):04d}",
+                        "created_utc": dt.timestamp() + rng.integers(0, 86400),
+                        "score": int(rng.integers(-1, 10)),
+                        "body_length": int(rng.integers(5, 200)),
+                        "id": f"c_{prev_id}_extra_{j}",
+                    })
+                posts[-1]["num_comments"] = len(all_comments[prev_id])
+                # Re-save updated comments
+                comment_file = os.path.join(COMMENTS_DIR, f"{prev_id}.json")
+                with open(comment_file, "w") as f:
+                    json.dump(all_comments[prev_id], f, indent=2)
             continue
 
         post_id = f"sim_{day_offset:04d}"
